@@ -40,12 +40,12 @@ Every backtest at rebalance date `t` must construct its universe from:
 
 ```
 universe(t) = (
-    index_constituents_history.get_companies_in_index_at(index_name='Nifty500', t)
-  ∪ delisted_companies_active_at(t)
+    get_index_constituents_as_of(index_name='NIFTY_500', as_of_date=t)
+  ∪ get_delisted_companies_active_at(as_of_date=t)
 )
 ```
 
-`delisted_companies_active_at(t)` returns companies that were trading at `t` but were later delisted, suspended, merged out, or otherwise removed. This is mandatory. A backtest that uses today's index constituents projected backward (the default in many retail tooling stacks) silently overstates returns by the survivorship gap.
+`get_delisted_companies_active_at(t)` (per `point_in_time_methodology.md` §3) returns companies that were trading at `t` but were later delisted, suspended, merged out, or otherwise removed. This is mandatory. A backtest that uses today's index constituents projected backward (the default in many retail tooling stacks) silently overstates returns by the survivorship gap.
 
 ### 3.1 Minimum coverage requirement
 
@@ -210,12 +210,12 @@ Outperformance against Nifty 500 TRI can be passive style drift (e.g., tilting m
 
 Use a 4-factor model adapted to Indian equities:
 
-- **MKT**: Nifty 500 TRI minus risk-free (overnight T-bill rate).
-- **SMB**: Nifty Smallcap 250 TRI − Nifty 100 TRI.
-- **HML**: portfolio of high book-to-market minus low book-to-market deciles within Nifty 500. Constructed from `ratios` table at each rebalance.
-- **MOM**: 12-1 month price momentum decile spread within Nifty 500.
+- **MKT**: Nifty 500 TRI minus risk-free (91-day T-bill yield, per `benchmark_methodology.md` §6).
+- **SMB**: Nifty Smallcap 250 TRI − Nifty 100 TRI (per `benchmark_methodology.md` §7).
+- **HML**: top tercile minus bottom tercile by book-to-market within Nifty 500, annual October rebalance (per `benchmark_methodology.md` §8).
+- **MOM**: top tercile minus bottom tercile by 12-1 month return within Nifty 500, monthly rebalance (per `benchmark_methodology.md` §9).
 
-Factor returns are computed monthly from the same data the system uses. Construction details are deferred to the feature engine spec.
+Factor returns are computed monthly from the same data the system uses. Tercile (rather than decile) granularity is used for HML and MOM because Nifty 500 deciles produce ~50 names per bucket and become statistically thin after sector / liquidity filters; full construction is in `benchmark_methodology.md`.
 
 ### 9.2 Attribution regression
 
@@ -327,13 +327,13 @@ When any of the above is detected, the strategy is reverted, the holdout is burn
 
 ## 13. Open questions deferred to sibling docs
 
-1. Exact cost-model parameters (transaction charges, STT, stamp duty, slippage by liquidity bucket) — `cost_tax_methodology.md`.
-2. `as_known_at` semantics and restatement handling — `point_in_time_methodology.md`.
-3. Indian small-cap factor universe construction (which exact small-cap index for SMB) — `benchmark_methodology.md`.
-4. Risk-free rate proxy for MKT factor (1-month T-bill, MIBOR, repo rate?) — `benchmark_methodology.md`.
-5. HML and MOM factor construction details (decile boundaries, rebalance cadence) — feature-engine spec.
-6. Treatment of currency or capital-gains tax regime changes outside the documented STCG/LTCG transitions — `cost_tax_methodology.md`.
-7. Reference data sources for delisted-company seed list and recovery rates — `data_sources.md`.
+1. Exact cost-model parameters (transaction charges, STT, stamp duty, slippage by liquidity bucket) — closed by `cost_tax_methodology.md` §2–4.
+2. `as_known_at` semantics and restatement handling — closed by `point_in_time_methodology.md` §2.
+3. Indian small-cap factor universe construction (which exact small-cap index for SMB) — closed by `benchmark_methodology.md` §7.
+4. Risk-free rate proxy for MKT factor — closed by `benchmark_methodology.md` §6 (91-day T-bill).
+5. HML and MOM factor construction details (tercile boundaries, rebalance cadence) — closed by `benchmark_methodology.md` §8–9.
+6. Treatment of capital-gains tax regime changes outside the documented STCG/LTCG transitions — closed by `cost_tax_methodology.md` §5.
+7. Reference data sources for delisted-company seed list and recovery rates — closed by `data_sources.md` §6.
 
 ## 14. Dependencies
 

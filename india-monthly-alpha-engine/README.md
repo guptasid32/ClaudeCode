@@ -4,13 +4,15 @@ Personal-use capital deployment engine for ₹25,000 / month into Indian equitie
 
 This repository starts at Phase 0: methodology specification. No engine code is written until the methodology docs in `docs/` are locked.
 
-Authoritative specs (Phase 0):
+Authoritative specs (Phase 0, all locked):
 
-- `docs/scoring_methodology.md` — locked
-- `docs/backtest_validity_methodology.md` — locked
-- `docs/benchmark_methodology.md` — pending
-- `docs/point_in_time_methodology.md` — pending
-- `docs/cost_tax_methodology.md` — pending
+- `docs/scoring_methodology.md`
+- `docs/backtest_validity_methodology.md`
+- `docs/point_in_time_methodology.md`
+- `docs/benchmark_methodology.md`
+- `docs/cost_tax_methodology.md`
+- `docs/data_sources.md`
+- `docs/architecture.md`
 
 Everything else (PIT loader, feature engines, deployment engine, backtester, reports) is downstream of these.
 

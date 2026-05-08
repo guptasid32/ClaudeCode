@@ -85,13 +85,14 @@ For a given `as_of_date`, candidate company `c`, and cohort buckets, the cohort 
 
 ```
 cohort = {
-    (m, t) : m ∈ companies_active_at(t), t ∈ [as_of_date − 10y, as_of_date − 12m],
-    bucket(m, t) == bucket(c, as_of_date),
-    m != c
+    (m, t) : m ∈ get_companies_active_at(t) ∪ get_delisted_companies_active_at(t),
+             t ∈ [as_of_date − 10y, as_of_date − 12m],
+             bucket(m, t) == bucket(c, as_of_date),
+             m != c
 }
 ```
 
-`companies_active_at(t)` must include companies that were later delisted, suspended, or merged out — survivor-only cohorts produce upward-biased forward-return estimates and are not allowed. The PIT loader's `get_companies_active_at(t)` and `delisted_companies_active_at(t)` are the union source.
+The cohort universe must include companies that were later delisted, suspended, or merged out — survivor-only cohorts produce upward-biased forward-return estimates and are not allowed. The PIT loader's `get_companies_active_at(t)` and `get_delisted_companies_active_at(t)` (per `point_in_time_methodology.md` §3) provide the union source.
 
 The window ends at `as_of_date − 12m` because each cohort observation needs a complete 12-month forward return.
 
@@ -322,13 +323,13 @@ E[after_tax_after_cost_excess_return_12m(X)] =
 - 20% if X is a new buy (replacement triggers exit of `w` whose holding period determines the tax on the existing leg). For the new leg, model 20% prospectively (most conservative; assumes ≤12m hold).
 - For the **existing leg** of the swap (selling `w`): 20% if `w` has been held < 12 months; 12.5% (above the ₹1.25L per-FY threshold; assume met for replacement decisions, conservative) if ≥ 12 months.
 
-`round_trip_cost_pct(X)` from `cost_tax_methodology.md` (forthcoming). Placeholder: 0.4% on liquid mid/large names; 0.8% on small/micro/illiquid.
+`round_trip_cost_pct(X)` from `cost_tax_methodology.md` §4. Working defaults (zero_delivery brokerage model): 0.6% on liquid mid/large names at ₹5,000+ tickets; up to 1.4% on smaller tickets or under the discount_capped brokerage model; 1.5–2.5% on small/micro/illiquid. The simulator uses the actual figures from the cost model at trade time.
 
 `replacement_threshold(w)`:
-- 4.0 percentage points if `w` is held < 12 months (STCG path; high tax wedge).
-- 1.5 percentage points if `w` is held ≥ 12 months (LTCG path).
+- 4.0 percentage points if `w` is held < 12 months (STCG path; high tax wedge). Tight against the realistic ~4.4pp wedge — treated as a margin-of-safety floor.
+- 3.0 percentage points if `w` is held ≥ 12 months (LTCG path). Revised upward from an earlier 1.5pp draft once `cost_tax_methodology.md` §4 grounded the realistic LTCG-path wedge at ~2.9pp.
 
-Rationale: STCG at 20% on a typical 12-month gain of ~15% costs ~3 percentage points of the active edge. The replacement candidate must clear that wedge plus a buffer for cost and uncertainty before the swap is justified.
+Rationale: STCG at 20% on a typical 12-month gain of ~17% plus a ~1% round-trip cost yields ~4.4pp wedge; the 4pp gate barely clears it and is intentionally conservative. LTCG at 12.5% on a similar gain plus the same cost yields ~2.9pp wedge; the 3pp gate clears it with a small buffer.
 
 If `n` does not clear the threshold, the deployment engine prefers (in order): adding to existing `intact` holdings under cap, allocating to index, holding cash.
 
@@ -422,16 +423,16 @@ End-to-end consistent. Every number is a function of PIT loader output and the f
 
 ## 9. Open questions deferred to sibling docs
 
-These items are referenced by the methodology but not locked in this document. Each must be locked before the corresponding feature engine is built.
+All items below are now closed by the sibling docs they reference. Listed for traceability:
 
-1. **Index instrument cutover rule** (Nifty 500 index fund SIP vs. NIFTYBEES ETF, threshold typically ₹5,000) — `benchmark_methodology.md`.
-2. **Slippage and bid-ask cost model parameters** — `cost_tax_methodology.md`. Placeholder: half-spread max(₹0.05, 0.05% of trade value) for liquid; 2–5× for illiquid.
-3. **T+1 settlement modelling** for replacement buys (fill price assumption, cash gap handling) — deployment-engine spec.
-4. **Restated filings / `as_known_at` semantics** for the PIT loader — `point_in_time_methodology.md`.
-5. **Automated data refresh sources** (NSE bhavcopy, BSE corp-actions feed) and update cadence — `data_sources.md`.
-6. **Multiple-testing correction** for champion-challenger holdout (Bonferroni vs. pre-registered single strategy) — `backtest_validity_methodology.md`.
-7. **Style-aware benchmark attribution** (decompose portfolio return into Nifty 500 TRI + style tilt + selection alpha) — `backtest_validity_methodology.md`.
-8. **DB engine choice** (recommended: SQLite for OLTP + DuckDB for analytics) — `architecture.md`.
+1. **Index instrument cutover rule** (Nifty 500 index fund SIP < ₹5,000; Nifty 500 ETF — Motilal Oswal / ICICI Prudential, not NIFTYBEES — for ≥ ₹5,000) — closed by `benchmark_methodology.md` §5.
+2. **Slippage and bid-ask cost model parameters** (half-spread per liquidity bucket) — closed by `cost_tax_methodology.md` §3.
+3. **T+1 settlement modelling** for replacement buys — closed by `cost_tax_methodology.md` §12.
+4. **Restated filings / `as_known_at` semantics** for the PIT loader — closed by `point_in_time_methodology.md` §2.
+5. **Automated data refresh sources** (NSE bhavcopy, BSE corp-actions feed) and update cadence — closed by `data_sources.md` §4 and §8.
+6. **Multiple-testing correction** for champion-challenger holdout — closed by `backtest_validity_methodology.md` §7.3 (pre-registered single strategy).
+7. **Style-aware benchmark attribution** — closed by `backtest_validity_methodology.md` §9 and `benchmark_methodology.md` §3–4.
+8. **DB engine choice** — closed by `architecture.md` §3 (SQLite + DuckDB side-by-side).
 
 ## 10. Dependencies
 
