@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from ._helpers import IngestStats
 from .company_loader import load_companies
 from .corporate_action_loader import load_corporate_actions
+from .delisted_loader import load_delisted_seed_list
 from .filing_loader import load_filings
 from .financial_loader import load_financials
 from .index_constituent_loader import load_index_constituents
@@ -52,6 +53,14 @@ def ingest_all(session: Session, raw_dir: Path) -> dict[str, IngestStats]:
         for csv in _glob_csv(companies_dir):
             _aggregate(companies_stats, load_companies(session, csv))
     results["companies"] = companies_stats
+
+    # 1a. delisted-companies seed list — adds Company rows with status=delisted
+    delisted_dir = raw_dir / "delisted_companies"
+    delisted_stats = IngestStats()
+    if delisted_dir.exists():
+        for csv in _glob_csv(delisted_dir):
+            _aggregate(delisted_stats, load_delisted_seed_list(session, csv))
+    results["delisted_companies"] = delisted_stats
 
     # 2. all per-symbol loaders
     loader_map = {

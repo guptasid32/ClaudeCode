@@ -42,12 +42,35 @@ class Company(Base):
     industry: Mapped[str | None] = mapped_column(String(64), nullable=True)
     market_cap_category: Mapped[str | None] = mapped_column(String(16), nullable=True)
     listing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    delisting_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     source_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sources.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+
+
+class DelistingEvent(Base):
+    """Per backtest_validity_methodology.md section 4.2 and data_sources.md section 6.
+
+    Records the distress / delisting / recapitalisation event for survivorship-
+    correct universe construction (backtest_validity_methodology.md section 3.1).
+    """
+
+    __tablename__ = "delisting_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    company_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("companies.id"), nullable=False, index=True
+    )
+    event_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    recovery_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    source_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    source_id: Mapped[int] = mapped_column(Integer, ForeignKey("sources.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class PriceDaily(Base):
