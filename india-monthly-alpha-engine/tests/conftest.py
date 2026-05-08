@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 from sqlalchemy.orm import Session
 
-from india_monthly_alpha_engine.db import Base
+from india_monthly_alpha_engine.db import (
+    Base,
+    models,  # noqa: F401  populate metadata
+    models_raw,  # noqa: F401  populate metadata
+)
 from india_monthly_alpha_engine.db.session import get_engine, get_session
 
 

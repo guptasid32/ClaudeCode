@@ -34,7 +34,7 @@ db-init:
 
 # Phase-2+ targets — currently stubs that print and exit nonzero
 ingest:
-	@echo "ingest: not implemented (Phase 2)"; exit 1
+	$(PY) -m india_monthly_alpha_engine.app.main ingest
 
 monthly:
 	@echo "monthly: not implemented (Phase 12)"; exit 1

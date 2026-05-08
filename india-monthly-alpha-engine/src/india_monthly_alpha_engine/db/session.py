@@ -27,7 +27,7 @@ def _get_session_factory(sqlite_url: str) -> sessionmaker[Session]:
     if sqlite_url not in _session_factory_cache:
         _session_factory_cache[sqlite_url] = sessionmaker(
             bind=get_engine(sqlite_url),
-            autoflush=False,
+            autoflush=True,
             expire_on_commit=False,
             future=True,
         )

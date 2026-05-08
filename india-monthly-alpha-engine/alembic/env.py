@@ -8,6 +8,7 @@ from sqlalchemy import engine_from_config, pool
 from india_monthly_alpha_engine.app.config import get_settings
 from india_monthly_alpha_engine.db import Base
 from india_monthly_alpha_engine.db import models  # noqa: F401  ensure metadata population
+from india_monthly_alpha_engine.db import models_raw  # noqa: F401  raw history tables
 
 config = context.config
 
