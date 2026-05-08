@@ -1,0 +1,113 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "india-monthly-alpha-engine"
+version = "0.1.0"
+description = "Personal-use monthly capital deployment engine for Indian equities"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Personal use only" }
+authors = [{ name = "personal" }]
+dependencies = [
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "duckdb>=1.0",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.1",
+    "structlog>=24.1",
+    "click>=8.1",
+    "python-dateutil>=2.8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+    "mypy>=1.8",
+    "import-linter>=2.0",
+    "types-python-dateutil",
+]
+
+[project.scripts]
+imae = "india_monthly_alpha_engine.app.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "PT", "SIM", "RET"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+markers = [
+    "integration: integration tests requiring real DB",
+    "slow: slow tests",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.importlinter]
+root_packages = ["india_monthly_alpha_engine"]
+
+[[tool.importlinter.contracts]]
+name = "pit is the only consumer of raw history models"
+type = "forbidden"
+source_modules = [
+    "india_monthly_alpha_engine.features",
+    "india_monthly_alpha_engine.engines",
+    "india_monthly_alpha_engine.backtest",
+    "india_monthly_alpha_engine.historical",
+    "india_monthly_alpha_engine.reports",
+    "india_monthly_alpha_engine.ui",
+]
+forbidden_modules = ["india_monthly_alpha_engine.db.models_raw"]
+
+[[tool.importlinter.contracts]]
+name = "ingestion does not read from pit"
+type = "forbidden"
+source_modules = ["india_monthly_alpha_engine.ingestion"]
+forbidden_modules = ["india_monthly_alpha_engine.pit"]
+
+[[tool.importlinter.contracts]]
+name = "ui does not invoke engines or backtest directly"
+type = "forbidden"
+source_modules = ["india_monthly_alpha_engine.ui"]
+forbidden_modules = [
+    "india_monthly_alpha_engine.engines",
+    "india_monthly_alpha_engine.backtest",
+    "india_monthly_alpha_engine.historical",
+]
+
+[[tool.importlinter.contracts]]
+name = "no circular imports across top-level packages"
+type = "layers"
+layers = [
+    "india_monthly_alpha_engine.app",
+    "india_monthly_alpha_engine.reports",
+    "india_monthly_alpha_engine.historical",
+    "india_monthly_alpha_engine.backtest",
+    "india_monthly_alpha_engine.engines",
+    "india_monthly_alpha_engine.features",
+    "india_monthly_alpha_engine.pit",
+    "india_monthly_alpha_engine.ingestion",
+    "india_monthly_alpha_engine.schemas",
+    "india_monthly_alpha_engine.db",
+    "india_monthly_alpha_engine.utils",
+]
