@@ -78,6 +78,8 @@ source_modules = [
     "india_monthly_alpha_engine.ui",
 ]
 forbidden_modules = ["india_monthly_alpha_engine.db.models_raw"]
+# Direct imports only: indirect access via pit/ is the whole point.
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "ingestion does not read from pit"
