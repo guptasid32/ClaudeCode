@@ -28,7 +28,6 @@ from india_monthly_alpha_engine.engines.portfolio_edge import (
     compute_portfolio_edge_score,
 )
 
-
 # Cohort engine ------------------------------------------------------------
 
 
