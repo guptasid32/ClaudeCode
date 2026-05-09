@@ -30,6 +30,11 @@ dev = [
     "import-linter>=2.0",
     "types-python-dateutil",
 ]
+data = [
+    "yfinance>=0.2.40",
+    "pandas>=2.0",
+    "requests>=2.31",
+]
 
 [project.scripts]
 imae = "india_monthly_alpha_engine.app.main:cli"
@@ -78,7 +83,6 @@ source_modules = [
     "india_monthly_alpha_engine.ui",
 ]
 forbidden_modules = ["india_monthly_alpha_engine.db.models_raw"]
-# Direct imports only: indirect access via pit/ is the whole point.
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
@@ -101,6 +105,7 @@ forbidden_modules = [
 name = "no circular imports across top-level packages"
 type = "layers"
 layers = [
+    "india_monthly_alpha_engine.tools",
     "india_monthly_alpha_engine.app",
     "india_monthly_alpha_engine.reports",
     "india_monthly_alpha_engine.historical",
