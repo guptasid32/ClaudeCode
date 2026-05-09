@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import sys
+from datetime import date as date_cls
 from pathlib import Path
 
 import click
 
 from .. import __version__
 from ..db.session import get_session, healthcheck_duckdb, healthcheck_sqlite
+from ..engines.orchestrator import run_monthly_cycle
 from ..ingestion.manual_upload import ingest_all
 from .config import get_settings
 from .logging_config import configure_logging, get_logger
@@ -82,6 +84,43 @@ def ingest(raw_dir: Path | None) -> None:
             rows_skipped=stats.rows_skipped,
         )
     click.echo("OK")
+
+
+@cli.command()
+@click.option("--as-of", type=str, default=None, help="ISO date YYYY-MM-DD; defaults to today.")
+@click.option("--capital", type=int, default=25_000, help="Monthly capital in rupees.")
+@click.option("--benchmark", type=str, default="NIFTY_500_TRI")
+@click.option("--universe-index", type=str, default="NIFTY_500")
+def monthly(as_of: str | None, capital: int, benchmark: str, universe_index: str) -> None:
+    """Phase 12 live monthly orchestrator. Persists deployment plan + predictions."""
+    settings = get_settings()
+    configure_logging(settings)
+    log = get_logger("monthly")
+
+    target = date_cls.fromisoformat(as_of) if as_of else date_cls.today()
+    settings.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with get_session(settings.sqlite_url) as session:
+        result = run_monthly_cycle(
+            session,
+            as_of_date=target,
+            monthly_capital=capital,
+            benchmark_index=benchmark,
+            universe_index=universe_index,
+        )
+
+    log.info(
+        "monthly.result",
+        plan_id=result.plan_id,
+        rebalance_date=str(result.rebalance_date),
+        pes=result.pes,
+        index_amount=result.index_amount,
+        active_amount=result.active_amount,
+        candidates=result.n_candidates_evaluated,
+        strong=result.n_strong_candidates,
+        actions=result.n_actions,
+    )
+    click.echo(f"OK plan_id={result.plan_id} pes={result.pes} index={result.index_amount} active={result.active_amount}")
 
 
 if __name__ == "__main__":

@@ -26,12 +26,30 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..db.models_raw import (
+    Company,
     CorporateAction,
     Filing,
     FinancialStatement,
     IndexConstituentHistory,
     PriceDaily,
 )
+
+
+@dataclass(frozen=True)
+class CompanyMetadata:
+    """Static-ish company metadata. Used by feature engines that need
+    sector / size / symbol without touching raw history models."""
+
+    company_id: int
+    symbol: str
+    company_name: str
+    exchange: str
+    sector: str | None
+    industry: str | None
+    market_cap_category: str | None
+    listing_date: date | None
+    delisting_date: date | None
+    status: str
 
 
 @dataclass(frozen=True)
@@ -320,3 +338,21 @@ def feature_snapshot_hash(payload: dict[str, Any]) -> str:
     """SHA-256 of the canonical serialisation. Used by historical_predictions
     to allow replay verification (point_in_time_methodology.md section 8)."""
     return hashlib.sha256(serialise_for_hash(payload).encode("utf-8")).hexdigest()
+
+
+def get_company_metadata(session: Session, company_id: int) -> CompanyMetadata | None:
+    company = session.get(Company, company_id)
+    if company is None:
+        return None
+    return CompanyMetadata(
+        company_id=company.id,
+        symbol=company.symbol,
+        company_name=company.company_name,
+        exchange=company.exchange,
+        sector=company.sector,
+        industry=company.industry,
+        market_cap_category=company.market_cap_category,
+        listing_date=company.listing_date,
+        delisting_date=company.delisting_date,
+        status=company.status,
+    )

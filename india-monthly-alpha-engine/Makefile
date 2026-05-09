@@ -37,7 +37,7 @@ ingest:
 	$(PY) -m india_monthly_alpha_engine.app.main ingest
 
 monthly:
-	@echo "monthly: not implemented (Phase 12)"; exit 1
+	$(PY) -m india_monthly_alpha_engine.app.main monthly
 
 backtest:
 	@echo "backtest: not implemented (Phase 13)"; exit 1
