@@ -36,6 +36,30 @@ let saveTimer = null;
 let saveInFlight = null;
 let pendingSave = false;
 const STATUS_EL = () => document.getElementById("storage-status");
+const TOKEN_KEY = "couple-fund-manager:token";
+
+// On first load the user opens http://laptop/?k=TOKEN. We persist the token
+// in localStorage so subsequent visits don't need the query string.
+function captureTokenFromUrl() {
+  try {
+    const u = new URL(window.location.href);
+    const k = u.searchParams.get("k");
+    if (k) {
+      localStorage.setItem(TOKEN_KEY, k);
+      u.searchParams.delete("k");
+      window.history.replaceState({}, "", u.pathname + (u.search || "") + u.hash);
+    }
+  } catch {}
+}
+
+function getToken() {
+  try { return localStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; }
+}
+
+function authHeaders(extra = {}) {
+  const t = getToken();
+  return t ? { ...extra, Authorization: `Bearer ${t}` } : extra;
+}
 
 function setStatus(text, kind) {
   const el = STATUS_EL();
@@ -44,8 +68,17 @@ function setStatus(text, kind) {
   el.dataset.kind = kind || "";
 }
 
+// Don't clobber what the user is currently typing on a remote refresh.
+function userIsEditing() {
+  const a = document.activeElement;
+  if (!a) return false;
+  const tag = a.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
 async function loadFromServer() {
-  const r = await fetch("/api/state", { cache: "no-store" });
+  const r = await fetch("/api/state", { cache: "no-store", headers: authHeaders() });
+  if (r.status === 401) throw new Error("unauthorized");
   if (!r.ok) throw new Error(`GET /api/state -> ${r.status}`);
   const body = await r.json();
   serverVersion = body.version || 0;
@@ -63,6 +96,7 @@ function loadFromLocal() {
 }
 
 async function loadState() {
+  captureTokenFromUrl();
   if (location.protocol === "http:" || location.protocol === "https:") {
     try {
       const s = await loadFromServer();
@@ -70,9 +104,13 @@ async function loadState() {
       setStatus(`Synced with laptop · v${serverVersion}`, "ok");
       return s;
     } catch (e) {
-      console.warn("Server load failed; falling back to localStorage.", e);
+      const reason = String(e && e.message);
       backend = "local";
-      setStatus("Offline — data on this device only", "warn");
+      if (reason === "unauthorized") {
+        setStatus("Token missing — open the URL printed by the server", "warn");
+      } else {
+        setStatus("Offline — data on this device only", "warn");
+      }
       return loadFromLocal();
     }
   }
@@ -85,38 +123,82 @@ async function saveToServer() {
   if (saveInFlight) { pendingSave = true; return; }
   setStatus("Saving…", "pending");
   const snapshot = JSON.stringify({ state });
+  const savedAtVersion = serverVersion;
   saveInFlight = fetch("/api/state", {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json", "If-Match": String(savedAtVersion) }),
     body: snapshot,
   }).then(async (r) => {
+    if (r.status === 409) {
+      // Another device wrote since we last synced. Pull their state, merge
+      // our local-only edits on top, and resubmit. This loses field-level
+      // conflicts but preserves additive changes (statements, expenses).
+      const body = await r.json().catch(() => ({}));
+      const serverState = await fetch("/api/state", { headers: authHeaders(), cache: "no-store" })
+        .then((x) => x.json())
+        .then((j) => { serverVersion = j.version || body.current_version || 0; return mergeWithDefaults(j.state); });
+      state = mergeUnion(serverState, state);
+      setStatus("Merged a change from another device — re-saving…", "pending");
+      render();
+      // Re-enter save with the merged state and the fresh version
+      saveInFlight = null;
+      return saveToServer();
+    }
+    if (r.status === 401) throw new Error("unauthorized");
     if (!r.ok) throw new Error(`PUT /api/state -> ${r.status}`);
     const body = await r.json();
     serverVersion = body.version || serverVersion + 1;
     setStatus(`Synced with laptop · v${serverVersion}`, "ok");
   }).catch((e) => {
     console.warn("Save failed:", e);
-    setStatus("Save failed — keeping a local copy", "warn");
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+    if (String(e && e.message) === "unauthorized") {
+      setStatus("Token rejected — reopen the URL printed by the server", "warn");
+    } else {
+      setStatus("Save failed — keeping a local copy", "warn");
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+      catch (qe) {
+        if (qe && qe.name === "QuotaExceededError") {
+          setStatus("Local storage full — delete some statements", "warn");
+        }
+      }
+    }
   }).finally(() => {
     saveInFlight = null;
     if (pendingSave) { pendingSave = false; saveToServer(); }
   });
 }
 
+// Union-merge two states: server wins on people/currency (last writer),
+// arrays are unioned by id so concurrent statement uploads survive.
+function mergeUnion(serverState, localState) {
+  const out = { ...serverState };
+  for (const k of ["expenses", "savings", "statements"]) {
+    const byId = new Map();
+    for (const x of serverState[k] || []) byId.set(x.id, x);
+    for (const x of localState[k] || []) if (!byId.has(x.id)) byId.set(x.id, x);
+    out[k] = [...byId.values()];
+  }
+  return out;
+}
+
 function save() {
   if (backend === "server") {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(saveToServer, 250);
+    saveTimer = setTimeout(() => { saveTimer = null; saveToServer(); }, 250);
   } else {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    catch (e) {
+      if (e && e.name === "QuotaExceededError") {
+        setStatus("Local storage full — delete some statements", "warn");
+      }
+    }
   }
 }
 
 async function clearStorage() {
   if (backend === "server") {
     try {
-      const r = await fetch("/api/state", { method: "DELETE" });
+      const r = await fetch("/api/state", { method: "DELETE", headers: authHeaders() });
       if (!r.ok) throw new Error(`DELETE /api/state -> ${r.status}`);
       const body = await r.json();
       serverVersion = body.version || serverVersion + 1;
@@ -131,8 +213,11 @@ async function clearStorage() {
 
 async function refreshFromServer() {
   if (backend !== "server") return false;
+  // Don't replace state (and re-paint inputs) under a typing user, and don't
+  // race a save that already has a snapshot in flight.
+  if (userIsEditing() || saveInFlight || saveTimer) return false;
   try {
-    const r = await fetch("/api/state", { cache: "no-store" });
+    const r = await fetch("/api/state", { cache: "no-store", headers: authHeaders() });
     if (!r.ok) return false;
     const body = await r.json();
     if ((body.version || 0) === serverVersion) return false;
@@ -163,6 +248,13 @@ const accountLabel = (key) => {
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+// Allow-list class names so a tainted state field (e.g. from a hand-edited
+// data.json) can't break out of the attribute and inject HTML.
+const _ACCOUNT_CLASSES = new Set(["personalA", "personalB", "joint"]);
+const _SAVING_TYPE_CLASSES = new Set(["savings", "investment"]);
+const safeAccountClass = (a) => (_ACCOUNT_CLASSES.has(a) ? a : "joint");
+const safeSavingTypeClass = (t) => (_SAVING_TYPE_CLASSES.has(t) ? t : "savings");
 
 // ---------- Tabs ----------
 function initTabs() {
@@ -225,6 +317,10 @@ function initReset() {
   const refresh = document.getElementById("refresh-btn");
   if (refresh) {
     refresh.addEventListener("click", async () => {
+      if (backend !== "server") {
+        setStatus("Not connected to the laptop — open the URL from serve.py", "warn");
+        return;
+      }
       const changed = await refreshFromServer();
       if (!changed) setStatus(`Up to date · v${serverVersion}`, "ok");
     });
@@ -266,9 +362,9 @@ function renderExpenses() {
     tr.innerHTML = `
       <td>${escapeHtml(item.name)}</td>
       <td>${escapeHtml(item.category || "—")}</td>
-      <td><span class="pill ${item.account}">${escapeHtml(accountLabel(item.account))}</span></td>
+      <td><span class="pill ${safeAccountClass(item.account)}">${escapeHtml(accountLabel(item.account))}</span></td>
       <td class="num">${fmt(item.amount)}</td>
-      <td class="num"><button class="icon" title="Delete" data-id="${item.id}">×</button></td>
+      <td class="num"><button class="icon" title="Delete" data-id="${escapeHtml(item.id)}">×</button></td>
     `;
     tr.querySelector("button").addEventListener("click", () => {
       state.expenses = state.expenses.filter((x) => x.id !== item.id);
@@ -305,10 +401,10 @@ function renderSavings() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(item.name)}</td>
-      <td><span class="pill ${item.type}">${item.type}</span></td>
-      <td><span class="pill ${item.account}">${escapeHtml(accountLabel(item.account))}</span></td>
+      <td><span class="pill ${safeSavingTypeClass(item.type)}">${escapeHtml(item.type)}</span></td>
+      <td><span class="pill ${safeAccountClass(item.account)}">${escapeHtml(accountLabel(item.account))}</span></td>
       <td class="num">${fmt(item.amount)}</td>
-      <td class="num"><button class="icon" title="Delete" data-id="${item.id}">×</button></td>
+      <td class="num"><button class="icon" title="Delete" data-id="${escapeHtml(item.id)}">×</button></td>
     `;
     tr.querySelector("button").addEventListener("click", () => {
       state.savings = state.savings.filter((x) => x.id !== item.id);
@@ -475,6 +571,7 @@ async function init() {
 window.CFM = {
   get state() { return state; },
   save, render, fmt, accountLabel, escapeHtml, uid,
+  safeAccountClass, safeSavingTypeClass,
 };
 
 if (document.readyState === "loading") {

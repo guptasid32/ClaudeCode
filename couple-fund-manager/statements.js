@@ -1,5 +1,9 @@
 "use strict";
 
+// Order matters: categorize() returns the FIRST matching category.
+// Put specific merchant buckets first, generic infrastructure terms
+// ("upi", "neft", "atm") last — otherwise "NEFT-FEES-LATE PAYMENT"
+// matches Transfers before Fees & Charges.
 const CATEGORIES = [
   "Food & Dining",
   "Groceries",
@@ -12,15 +16,18 @@ const CATEGORIES = [
   "Education",
   "Investments",
   "Income",
-  "Transfers",
-  "Cash",
   "Fees & Charges",
+  "Cash",
+  "Transfers",
   "Other",
 ];
 
+// Allow-list helpers live in app.js (window.CFM.safeAccountClass /
+// .safeSavingTypeClass) so both files share one source of truth.
+
 const CATEGORY_RULES = {
   "Food & Dining": ["swiggy", "zomato", "restaurant", "cafe", "dining", "mcdonald", "kfc", "pizza", "starbucks", "dunkin", "eatfit", "faasos", "barbeque", "biryani"],
-  "Groceries": ["bigbasket", "dmart", "d mart", "grofers", "blinkit", "zepto", "grocery", "instamart", "reliance fresh", "spencer", "more retail"],
+  "Groceries": ["bigbasket", "dmart", "d mart", "grofers", "blinkit", "zepto", "grocery", "groceries", "instamart", "reliance fresh", "spencer", "more retail"],
   "Transport": ["uber", "ola", "rapido", "irctc", "fuel", "petrol", "diesel", "metro", "shell", "bpcl", "iocl", "hpcl", "fastag", "parking", "indianoil"],
   "Utilities": ["electricity", "bescom", "msedcl", "tneb", "kseb", "water bill", "gas bill", "internet", "broadband", "airtel", "jio", "vi prepaid", "vodafone", "bsnl", "recharge", "act fibernet"],
   "Rent & Housing": ["rent", "maintenance", "society"],
@@ -99,14 +106,19 @@ function detectColumns(headers) {
     }
     return -1;
   };
-  // Order across roles also matters: date and amount columns are claimed
-  // first so a generic "description" pattern can't grab "Transaction Date".
+  // Order across roles matters. Claim:
+  //  1) the date column (most specific patterns first),
+  //  2) the type-indicator column (e.g. HDFC credit card "Debit / Credit"
+  //     holds "Dr"/"Cr", NOT amounts — must be claimed before any "debit"
+  //     substring search grabs it as an amount),
+  //  3) amount/debit/credit columns,
+  //  4) the description column last so generic patterns can't steal the date.
   const date = findCol(["transaction date", "txn date", "posting date", "tran date", "value date", "date"]);
+  const type = findCol(["debit / credit", "debit/credit", "dr/cr", "dr / cr", "cr/dr", "type"]);
   const debit = findCol(["withdrawal amt", "withdrawal amount", "debit amount", "withdrawal", "debit", "dr amount"]);
   const credit = findCol(["deposit amt", "deposit amount", "credit amount", "deposit", "credit", "cr amount"]);
-  const desc = findCol(["transaction remarks", "narration", "particulars", "description", "details", "remarks"]);
   const amount = findCol(["amount"]);
-  const type = findCol(["dr/cr", "type"]);
+  const desc = findCol(["transaction remarks", "narration", "particulars", "description", "details", "remarks"]);
   return { date, desc, debit, credit, amount, type };
 }
 
@@ -233,13 +245,22 @@ async function aiCategorize() {
     status.hidden = false;
     return;
   }
+  // Snapshot the draft so a Save / Discard / new-upload during the fetch
+  // can't cause us to mutate the wrong (or empty) draft on return.
+  const draftAtRequest = draftTxns;
+  const targetIds = new Set(targets.map((t) => t.id));
   btn.disabled = true;
   status.hidden = false;
   status.textContent = `Asking Claude to categorize ${targets.length} row${targets.length === 1 ? "" : "s"}…`;
   try {
+    const token = (() => {
+      try { return localStorage.getItem("couple-fund-manager:token") || ""; } catch { return ""; }
+    })();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const r = await fetch("/api/categorize", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         transactions: targets.map((t) => ({ id: t.id, description: t.description })),
         categories: CATEGORIES,
@@ -250,9 +271,14 @@ async function aiCategorize() {
       status.textContent = `AI categorization failed: ${body.error || r.statusText}`;
       return;
     }
+    if (draftTxns !== draftAtRequest) {
+      status.textContent = "Draft changed during request — AI result discarded.";
+      return;
+    }
     const results = body.results || {};
     let updated = 0;
     for (const t of draftTxns) {
+      if (!targetIds.has(t.id)) continue;
       const cat = results[t.id];
       if (cat && CATEGORIES.includes(cat) && cat !== t.category) {
         t.category = cat;
@@ -290,6 +316,7 @@ function initStatements() {
       }
       draftTxns = transactions;
       autoSetMonthFromDraft();
+      clearAIStatus();
       if (skipped) console.warn(`Skipped ${skipped} unparseable rows`);
       renderPreview();
     };
@@ -307,6 +334,7 @@ function initStatements() {
     }
     draftTxns = transactions;
     autoSetMonthFromDraft();
+    clearAIStatus();
     renderPreview();
   });
 
@@ -317,7 +345,12 @@ function initStatements() {
     const desc = document.getElementById("man-desc").value.trim();
     const debit = Number(document.getElementById("man-debit").value) || 0;
     const credit = Number(document.getElementById("man-credit").value) || 0;
-    if (!date || !desc || (debit <= 0 && credit <= 0)) return;
+    if (!date || !desc || (debit <= 0 && credit <= 0)) {
+      const status = document.getElementById("ai-status");
+      status.textContent = "Need a date, a description, and either an outflow or inflow amount.";
+      status.hidden = false;
+      return;
+    }
     draftTxns.push({
       id: window.CFM.uid(),
       date,
@@ -330,6 +363,11 @@ function initStatements() {
     renderPreview();
   });
 
+  function clearAIStatus() {
+    const s = document.getElementById("ai-status");
+    if (s) { s.hidden = true; s.textContent = ""; }
+  }
+
   // AI categorize
   document.getElementById("stmt-ai").addEventListener("click", aiCategorize);
   checkAIStatus();
@@ -338,6 +376,11 @@ function initStatements() {
   document.getElementById("stmt-discard").addEventListener("click", () => {
     if (draftTxns.length && !confirm("Discard the draft preview?")) return;
     draftTxns = [];
+    document.getElementById("stmt-paste").value = "";
+    // Clearing .value lets the user re-select the same file (the change
+    // event doesn't fire when the value is unchanged).
+    document.getElementById("stmt-file").value = "";
+    clearAIStatus();
     renderPreview();
   });
 
@@ -367,6 +410,7 @@ function initStatements() {
     draftTxns = [];
     document.getElementById("stmt-paste").value = "";
     document.getElementById("stmt-file").value = "";
+    clearAIStatus();
     renderPreview();
     window.CFM.render();
   });
@@ -433,10 +477,10 @@ function renderPreview() {
     tr.innerHTML = `
       <td>${window.CFM.escapeHtml(t.date)}</td>
       <td>${window.CFM.escapeHtml(t.description)}</td>
-      <td><select class="cat-select" data-id="${t.id}">${catOpts}</select></td>
+      <td><select class="cat-select" data-id="${window.CFM.escapeHtml(t.id)}">${catOpts}</select></td>
       <td class="num">${t.debit ? window.CFM.fmt(t.debit) : ""}</td>
       <td class="num">${t.credit ? window.CFM.fmt(t.credit) : ""}</td>
-      <td class="num"><button class="icon" data-del="${t.id}">×</button></td>
+      <td class="num"><button class="icon" data-del="${window.CFM.escapeHtml(t.id)}">×</button></td>
     `;
     tr.querySelector("select").addEventListener("change", (e) => {
       const row = draftTxns.find((x) => x.id === t.id);
@@ -468,12 +512,12 @@ function renderStatements() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${window.CFM.escapeHtml(s.month)}</td>
-      <td><span class="pill ${s.account}">${window.CFM.escapeHtml(window.CFM.accountLabel(s.account))}</span></td>
+      <td><span class="pill ${window.CFM.safeAccountClass(s.account)}">${window.CFM.escapeHtml(window.CFM.accountLabel(s.account))}</span></td>
       <td>${window.CFM.escapeHtml(s.label || "—")}</td>
       <td class="num">${s.transactions.length}</td>
       <td class="num">${window.CFM.fmt(out)}</td>
       <td class="num">${window.CFM.fmt(inn)}</td>
-      <td class="num"><button class="icon" data-id="${s.id}" title="Delete">×</button></td>
+      <td class="num"><button class="icon" data-id="${window.CFM.escapeHtml(s.id)}" title="Delete">×</button></td>
     `;
     tr.querySelector("button").addEventListener("click", () => {
       if (!confirm(`Delete ${s.month} statement for ${window.CFM.accountLabel(s.account)}?`)) return;

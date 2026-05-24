@@ -24,9 +24,11 @@ For AI categorization:
 Then restart the server. The key stays on the laptop; the browser never sees it.
 """
 
+import hmac
 import http.server
 import json
 import os
+import secrets
 import socket
 import socketserver
 import sys
@@ -38,9 +40,34 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
 HOST = "0.0.0.0"
 ROOT = Path(__file__).resolve().parent
 DATA_PATH = Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else (ROOT / "data.json")
+TOKEN_PATH = DATA_PATH.with_suffix(DATA_PATH.suffix + ".token")
+
+# Bound request bodies so a single LAN request can't OOM the laptop or fill the disk.
+MAX_STATE_BYTES = 16 * 1024 * 1024   # 16 MB — plenty for years of statements
+MAX_CATEGORIZE_BYTES = 1 * 1024 * 1024  # 1 MB — ~6000 transaction descriptions
 
 _lock = threading.Lock()
 _version = 0  # monotonically increases on every successful write
+_token: str = ""
+
+
+def _load_or_create_token() -> str:
+    """Read a persistent random token from disk, or create one on first run."""
+    if TOKEN_PATH.exists():
+        try:
+            t = TOKEN_PATH.read_text(encoding="utf-8").strip()
+            if t:
+                return t
+        except OSError:
+            pass
+    TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    t = secrets.token_urlsafe(24)
+    TOKEN_PATH.write_text(t, encoding="utf-8")
+    try:
+        os.chmod(TOKEN_PATH, 0o600)
+    except OSError:
+        pass
+    return t
 
 
 def _atomic_write(path: Path, content: bytes) -> None:
@@ -170,9 +197,12 @@ def _categorize_via_claude(transactions: list[dict], categories: list[str]) -> d
     # cache_control is harmless if the prompt is below the cacheable minimum
     # for Haiku (4096 tokens); on Opus it'll cache the system prompt across
     # repeated statement uploads in the same session.
+    # Each {id,category} pair is ~50 output tokens; budget for the enforced
+    # 500-transaction cap on /api/categorize with comfortable headroom so
+    # large statements don't truncate mid-JSON.
     response = client.messages.create(
         model=CATEGORIZE_MODEL,
-        max_tokens=4096,
+        max_tokens=32768,
         system=[{
             "type": "text",
             "text": _categorize_system_prompt,
@@ -198,6 +228,29 @@ def _categorize_via_claude(transactions: list[dict], categories: list[str]) -> d
     return out
 
 
+_SAFE_ERROR_HINTS = {
+    401: "Authentication failed. Check your ANTHROPIC_API_KEY.",
+    403: "API key lacks permission for this model.",
+    429: "Rate-limited by Anthropic. Try again in a moment.",
+    529: "Anthropic is overloaded. Try again in a moment.",
+}
+
+
+def _sanitize_api_error(e: Exception) -> str:
+    """Strip the full Anthropic error object before surfacing to the browser.
+
+    The SDK's APIStatusError stringifies to include the full request URL,
+    response body, organization id, and request id. None of that belongs
+    on a phone screen on the LAN.
+    """
+    import anthropic
+    if isinstance(e, anthropic.APIStatusError):
+        hint = _SAFE_ERROR_HINTS.get(e.status_code, "")
+        return f"Claude API error ({e.status_code}). {hint}".strip()
+    name = type(e).__name__
+    return f"Categorization failed: {name}"
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(ROOT), **kw)
@@ -206,33 +259,67 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
-    def _send_json(self, status: int, payload: dict) -> None:
+    def _send_json(self, status: int, payload: dict, extra_headers: dict | None = None) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        for k, v in (extra_headers or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
 
+    def _check_auth(self) -> bool:
+        """Reject /api/* requests without the right bearer token. Static files are open."""
+        header = self.headers.get("Authorization", "")
+        provided = header[7:] if header.startswith("Bearer ") else ""
+        if not provided or not hmac.compare_digest(provided, _token):
+            self._send_json(401, {"error": "Missing or invalid token. Open the URL printed by the server."})
+            return False
+        return True
+
+    def _read_capped_body(self, limit: int) -> bytes | None:
+        """Read a request body, refusing oversized or unsized requests. Returns None on failure."""
+        cl = self.headers.get("Content-Length")
+        if cl is None:
+            self._send_json(411, {"error": "Content-Length header required."})
+            return None
+        try:
+            length = int(cl)
+        except ValueError:
+            self._send_json(400, {"error": "Invalid Content-Length."})
+            return None
+        if length < 0 or length > limit:
+            self._send_json(413, {"error": f"Request body exceeds {limit} bytes."})
+            return None
+        return self.rfile.read(length) if length else b""
+
     def do_GET(self):
-        if self.path == "/api/state":
-            with _lock:
-                self._send_json(200, {"state": _read_state(), "version": _version})
-            return
         if self.path == "/api/categorize/status":
+            # Status check is open so the UI can decide whether to show the AI
+            # button without forcing a token round-trip first.
             ok, reason = _ai_available()
             payload = {"available": ok, "model": CATEGORIZE_MODEL}
             if reason:
                 payload["reason"] = reason
             self._send_json(200, payload)
             return
+        if self.path == "/api/state":
+            if not self._check_auth():
+                return
+            with _lock:
+                self._send_json(200, {"state": _read_state(), "version": _version})
+            return
         return super().do_GET()
 
     def do_PUT(self):
         if self.path == "/api/state":
+            if not self._check_auth():
+                return
             global _version
-            length = int(self.headers.get("Content-Length") or 0)
-            raw = self.rfile.read(length) if length else b"{}"
+            raw = self._read_capped_body(MAX_STATE_BYTES)
+            if raw is None:
+                return
             try:
                 payload = json.loads(raw.decode("utf-8") or "{}")
             except (UnicodeDecodeError, json.JSONDecodeError) as e:
@@ -242,7 +329,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not isinstance(state, dict):
                 self._send_json(400, {"error": "state must be a JSON object"})
                 return
+            # Optimistic concurrency: client sends the version it last saw.
+            # If another device wrote since, reject with 409 + the current
+            # version so the client can refetch instead of silently clobbering.
+            if_match = self.headers.get("If-Match")
             with _lock:
+                if if_match is not None:
+                    try:
+                        client_version = int(if_match)
+                    except ValueError:
+                        self._send_json(400, {"error": "If-Match must be an integer."})
+                        return
+                    if client_version != _version:
+                        self._send_json(409, {
+                            "error": "Version conflict — another device updated.",
+                            "current_version": _version,
+                        })
+                        return
                 try:
                     _atomic_write(DATA_PATH, json.dumps(state, indent=2).encode("utf-8"))
                     _version += 1
@@ -254,12 +357,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/api/categorize":
+            if not self._check_auth():
+                return
             ok, reason = _ai_available()
             if not ok:
                 self._send_json(503, {"error": reason})
                 return
-            length = int(self.headers.get("Content-Length") or 0)
-            raw = self.rfile.read(length) if length else b"{}"
+            raw = self._read_capped_body(MAX_CATEGORIZE_BYTES)
+            if raw is None:
+                return
             try:
                 payload = json.loads(raw.decode("utf-8") or "{}")
             except (UnicodeDecodeError, json.JSONDecodeError) as e:
@@ -283,15 +389,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 tid = str(t.get("id", "")).strip()
                 desc = str(t.get("description", "")).strip()
                 if tid and desc:
-                    cleaned.append({"id": tid, "description": desc[:200]})
+                    # 500 chars is enough for any merchant tail; was 200 before
+                    # which silently chopped the merchant token off long narrations.
+                    cleaned.append({"id": tid, "description": desc[:500]})
             if not cleaned:
                 self._send_json(400, {"error": "no valid transactions in request"})
                 return
             try:
                 results = _categorize_via_claude(cleaned, [str(c) for c in cats])
             except Exception as e:
-                # surface the error message so the UI can show something useful
-                self._send_json(502, {"error": f"Claude API call failed: {e}"})
+                self._send_json(502, {"error": _sanitize_api_error(e)})
                 return
             self._send_json(200, {"results": results, "model": CATEGORIZE_MODEL})
             return
@@ -299,6 +406,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         if self.path == "/api/state":
+            if not self._check_auth():
+                return
             global _version
             with _lock:
                 try:
@@ -345,16 +454,25 @@ def lan_addresses():
 
 
 def main():
-    global _version
+    global _version, _token
     if DATA_PATH.exists():
         _version = 1  # any starting version > 0 indicates "data exists"
+    _token = _load_or_create_token()
     with _Server((HOST, PORT), Handler) as httpd:
-        print(f"Couple Fund Manager")
+        print("Couple Fund Manager")
         print(f"  Static dir:  {ROOT}")
         print(f"  Data file:   {DATA_PATH}")
-        print(f"  Local:       http://localhost:{PORT}/")
+        print(f"  Token file:  {TOKEN_PATH}")
+        print()
+        print("  Bookmark these URLs on each device (the ?k=... is the access token):")
+        print(f"    Local:   http://localhost:{PORT}/?k={_token}")
         for ip in lan_addresses():
-            print(f"  Wi-Fi:       http://{ip}:{PORT}/")
+            print(f"    Wi-Fi:   http://{ip}:{PORT}/?k={_token}")
+        print()
+        print("  Anyone on the Wi-Fi can reach the static page, but the API")
+        print("  rejects requests without the token. Delete the token file to")
+        print("  rotate (a new one is created on next start).")
+        print()
         print("Press Ctrl+C to stop.")
         try:
             httpd.serve_forever()
