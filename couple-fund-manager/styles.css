@@ -423,6 +423,18 @@ input[type="date"], input[type="month"] {
 .big.positive { color: var(--good); }
 .big.negative { color: var(--bad); }
 
+.storage-status {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+.storage-status[data-kind="ok"] { color: var(--good); border-color: rgba(158,206,106,0.35); }
+.storage-status[data-kind="warn"] { color: var(--warn); border-color: rgba(224,175,104,0.35); }
+.storage-status[data-kind="pending"] { color: var(--accent); border-color: rgba(122,162,247,0.35); }
+
 .cat-pill {
   display: inline-block;
   font-size: 11px;

@@ -13,29 +13,138 @@ const defaultState = () => ({
   statements: [],
 });
 
-let state = load();
+function mergeWithDefaults(parsed) {
+  if (!parsed || typeof parsed !== "object") return defaultState();
+  const d = defaultState();
+  return {
+    ...d, ...parsed,
+    people: {
+      a: { ...d.people.a, ...(parsed.people?.a || {}) },
+      b: { ...d.people.b, ...(parsed.people?.b || {}) },
+    },
+    expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
+    savings: Array.isArray(parsed.savings) ? parsed.savings : [],
+    statements: Array.isArray(parsed.statements) ? parsed.statements : [],
+  };
+}
 
-function load() {
+// Storage backend: server API if available, else localStorage.
+let state = defaultState();
+let backend = "local"; // "server" | "local"
+let serverVersion = 0;
+let saveTimer = null;
+let saveInFlight = null;
+let pendingSave = false;
+const STATUS_EL = () => document.getElementById("storage-status");
+
+function setStatus(text, kind) {
+  const el = STATUS_EL();
+  if (!el) return;
+  el.textContent = text;
+  el.dataset.kind = kind || "";
+}
+
+async function loadFromServer() {
+  const r = await fetch("/api/state", { cache: "no-store" });
+  if (!r.ok) throw new Error(`GET /api/state -> ${r.status}`);
+  const body = await r.json();
+  serverVersion = body.version || 0;
+  return mergeWithDefaults(body.state);
+}
+
+function loadFromLocal() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultState();
-    const parsed = JSON.parse(raw);
-    return { ...defaultState(), ...parsed,
-      people: {
-        a: { ...defaultState().people.a, ...(parsed.people?.a || {}) },
-        b: { ...defaultState().people.b, ...(parsed.people?.b || {}) },
-      },
-      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
-      savings: Array.isArray(parsed.savings) ? parsed.savings : [],
-      statements: Array.isArray(parsed.statements) ? parsed.statements : [],
-    };
+    return mergeWithDefaults(JSON.parse(raw));
   } catch {
     return defaultState();
   }
 }
 
+async function loadState() {
+  if (location.protocol === "http:" || location.protocol === "https:") {
+    try {
+      const s = await loadFromServer();
+      backend = "server";
+      setStatus(`Synced with laptop · v${serverVersion}`, "ok");
+      return s;
+    } catch (e) {
+      console.warn("Server load failed; falling back to localStorage.", e);
+      backend = "local";
+      setStatus("Offline — data on this device only", "warn");
+      return loadFromLocal();
+    }
+  }
+  backend = "local";
+  setStatus("Local only (open via serve.py for shared storage)", "warn");
+  return loadFromLocal();
+}
+
+async function saveToServer() {
+  if (saveInFlight) { pendingSave = true; return; }
+  setStatus("Saving…", "pending");
+  const snapshot = JSON.stringify({ state });
+  saveInFlight = fetch("/api/state", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: snapshot,
+  }).then(async (r) => {
+    if (!r.ok) throw new Error(`PUT /api/state -> ${r.status}`);
+    const body = await r.json();
+    serverVersion = body.version || serverVersion + 1;
+    setStatus(`Synced with laptop · v${serverVersion}`, "ok");
+  }).catch((e) => {
+    console.warn("Save failed:", e);
+    setStatus("Save failed — keeping a local copy", "warn");
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+  }).finally(() => {
+    saveInFlight = null;
+    if (pendingSave) { pendingSave = false; saveToServer(); }
+  });
+}
+
 function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (backend === "server") {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveToServer, 250);
+  } else {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+  }
+}
+
+async function clearStorage() {
+  if (backend === "server") {
+    try {
+      const r = await fetch("/api/state", { method: "DELETE" });
+      if (!r.ok) throw new Error(`DELETE /api/state -> ${r.status}`);
+      const body = await r.json();
+      serverVersion = body.version || serverVersion + 1;
+      setStatus(`Synced with laptop · v${serverVersion}`, "ok");
+    } catch (e) {
+      console.warn("Server reset failed:", e);
+      setStatus("Reset failed on laptop", "warn");
+    }
+  }
+  try { localStorage.removeItem(STORAGE_KEY); } catch {}
+}
+
+async function refreshFromServer() {
+  if (backend !== "server") return false;
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    if (!r.ok) return false;
+    const body = await r.json();
+    if ((body.version || 0) === serverVersion) return false;
+    state = mergeWithDefaults(body.state);
+    serverVersion = body.version || 0;
+    setStatus(`Synced with laptop · v${serverVersion}`, "ok");
+    syncInputs();
+    render();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const fmt = (n) => {
@@ -103,13 +212,21 @@ function initCurrency() {
 
 // ---------- Reset ----------
 function initReset() {
-  document.getElementById("reset-btn").addEventListener("click", () => {
-    if (!confirm("Erase all stored data and start over?")) return;
-    localStorage.removeItem(STORAGE_KEY);
+  document.getElementById("reset-btn").addEventListener("click", async () => {
+    const where = backend === "server" ? "on the laptop" : "in this browser";
+    if (!confirm(`Erase all data stored ${where} and start over?`)) return;
+    await clearStorage();
     state = defaultState();
     syncInputs();
     render();
   });
+  const refresh = document.getElementById("refresh-btn");
+  if (refresh) {
+    refresh.addEventListener("click", async () => {
+      const changed = await refreshFromServer();
+      if (!changed) setStatus(`Up to date · v${serverVersion}`, "ok");
+    });
+  }
 }
 
 function syncInputs() {
@@ -335,7 +452,8 @@ function render() {
   if (typeof renderHistory === "function") renderHistory();
 }
 
-function init() {
+async function init() {
+  state = await loadState();
   initTabs();
   initCurrency();
   initSetup();
@@ -343,7 +461,12 @@ function init() {
   initExpenseForm();
   initSavingsForm();
   if (typeof initStatements === "function") initStatements();
+  syncInputs();
   render();
+  // Light polling so a second device sees the first device's changes
+  if (backend === "server") {
+    setInterval(() => { refreshFromServer(); }, 8000);
+  }
 }
 
 // Expose for statements.js

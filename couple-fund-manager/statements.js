@@ -84,22 +84,30 @@ function parseCSV(text) {
 
 function detectColumns(headers) {
   const norm = headers.map((h) => String(h || "").trim().toLowerCase());
+  // Each column can only fill one role. Patterns are listed most-specific
+  // first; the first pattern that matches any unclaimed column wins.
+  const claimed = new Set();
   const findCol = (patterns) => {
-    for (let i = 0; i < norm.length; i++) {
-      for (const p of patterns) {
-        if (norm[i].includes(p)) return i;
+    for (const p of patterns) {
+      for (let i = 0; i < norm.length; i++) {
+        if (claimed.has(i)) continue;
+        if (norm[i].includes(p)) {
+          claimed.add(i);
+          return i;
+        }
       }
     }
     return -1;
   };
-  return {
-    date: findCol(["txn date", "transaction date", "value date", "posting date", "date"]),
-    desc: findCol(["narration", "particulars", "description", "details", "remarks", "transaction remarks", "transaction"]),
-    debit: findCol(["withdrawal amt", "withdrawal amount", "withdrawal", "debit amount", "debit", " dr"]),
-    credit: findCol(["deposit amt", "deposit amount", "deposit", "credit amount", "credit", " cr"]),
-    amount: findCol(["amount"]),
-    type: findCol(["dr/cr", "type"]),
-  };
+  // Order across roles also matters: date and amount columns are claimed
+  // first so a generic "description" pattern can't grab "Transaction Date".
+  const date = findCol(["transaction date", "txn date", "posting date", "tran date", "value date", "date"]);
+  const debit = findCol(["withdrawal amt", "withdrawal amount", "debit amount", "withdrawal", "debit", "dr amount"]);
+  const credit = findCol(["deposit amt", "deposit amount", "credit amount", "deposit", "credit", "cr amount"]);
+  const desc = findCol(["transaction remarks", "narration", "particulars", "description", "details", "remarks"]);
+  const amount = findCol(["amount"]);
+  const type = findCol(["dr/cr", "type"]);
+  return { date, desc, debit, credit, amount, type };
 }
 
 function parseDate(s) {
@@ -299,6 +307,7 @@ function initStatements() {
     draftTxns = [];
     document.getElementById("stmt-paste").value = "";
     document.getElementById("stmt-file").value = "";
+    renderPreview();
     window.CFM.render();
   });
 
