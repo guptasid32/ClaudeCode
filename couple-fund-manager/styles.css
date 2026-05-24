@@ -49,15 +49,14 @@ html, body {
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
-.currency {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 12px;
+#refresh-btn {
+  font-size: 18px;
+  padding: 6px 12px;
+  line-height: 1;
+  min-width: 40px;
 }
 
 .tabs {
@@ -216,12 +215,13 @@ button.icon:hover { color: var(--bad); }
 
 .form-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1.2fr 1.2fr auto;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
-  align-items: center;
+  align-items: end;
 }
 
 .form-row input, .form-row select { margin-top: 0; }
+.form-row button { align-self: end; }
 
 @media (max-width: 720px) {
   .form-row { grid-template-columns: 1fr 1fr; }
@@ -322,29 +322,78 @@ button.icon:hover { color: var(--bad); }
 }
 
 /* Statements & history */
-.sub-tabs {
-  display: flex;
-  gap: 4px;
-  margin: 6px 0 12px;
-  border-bottom: 1px solid var(--border);
+.upload-area {
+  margin: 8px 0 12px;
 }
 
-.sub-tab {
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  padding: 8px 14px;
+.more-options {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.more-options summary {
   cursor: pointer;
-  font-size: 12px;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 6px 0;
+  list-style: none;
+  user-select: none;
+}
+.more-options summary::-webkit-details-marker { display: none; }
+.more-options summary::before {
+  content: "›";
+  display: inline-block;
+  margin-right: 8px;
+  transition: transform 0.15s ease;
+}
+.more-options[open] summary::before { transform: rotate(90deg); }
+.more-options summary:hover { color: var(--text); }
+
+.more-options-body {
+  padding: 12px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.sub-tab:hover { color: var(--text); }
-.sub-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.more-options-body .ghost { align-self: flex-start; }
 
-.sub-panel { display: none; }
-.sub-panel.active { display: block; }
+.sub-heading {
+  margin: 6px 0 -4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+}
+
+/* Settings card on the Plan tab */
+.settings-card {
+  padding: 12px 16px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  min-width: 160px;
+}
+
+.settings-field > span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+}
 
 textarea {
   width: 100%;
@@ -434,6 +483,156 @@ input[type="date"], input[type="month"] {
 .storage-status[data-kind="ok"] { color: var(--good); border-color: rgba(158,206,106,0.35); }
 .storage-status[data-kind="warn"] { color: var(--warn); border-color: rgba(224,175,104,0.35); }
 .storage-status[data-kind="pending"] { color: var(--accent); border-color: rgba(122,162,247,0.35); }
+
+/* ============================================================
+   Mobile / iPhone — keep small-screen tweaks together at the
+   end of the file so they cleanly override desktop rules.
+   ============================================================ */
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  /* prevents iOS rubber-band overscroll from showing white edges */
+  overscroll-behavior: contain;
+  /* respects the iPhone home-indicator safe area */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Inputs MUST be >=16px on iOS or Safari zooms in on focus */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="month"],
+select,
+textarea {
+  font-size: 16px;
+}
+
+/* Bigger touch targets — 44px is Apple's HIG minimum */
+button,
+.sub-tab,
+.tab {
+  min-height: 44px;
+  -webkit-tap-highlight-color: rgba(122, 162, 247, 0.2);
+}
+.data-table button.icon { min-height: 32px; min-width: 32px; }
+
+/* Tablet and narrower */
+@media (max-width: 880px) {
+  main { padding: 16px; }
+  .topbar { padding: 12px 16px; }
+  .tabs { padding: 8px 12px 0; overflow-x: auto; flex-wrap: nowrap; }
+  .tab { white-space: nowrap; flex-shrink: 0; }
+}
+
+/* Phone */
+@media (max-width: 640px) {
+  /* Topbar: stack vertically, smaller fonts */
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 14px env(safe-area-inset-bottom);
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+  .brand h1 { font-size: 17px; }
+  .brand .tag { display: none; }
+  .topbar-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .currency { margin-right: auto; }
+  .storage-status { order: -1; width: 100%; text-align: center; padding: 6px 10px; }
+
+  /* Tab strip: horizontal scroll instead of wrapping */
+  .tabs {
+    padding: 6px 12px 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { padding: 10px 14px; font-size: 13px; }
+
+  main { padding: 12px; }
+  .card { padding: 14px; border-radius: 8px; }
+  .card h3 { font-size: 12px; margin-bottom: 10px; }
+
+  .grid { gap: 12px; }
+
+  /* Form rows: always stack on phones, even when content is short */
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .form-row button { width: 100%; }
+
+  /* Wide tables: let them scroll horizontally inside the card */
+  .data-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+  .data-table th, .data-table td { padding: 10px 8px; }
+  .data-table .pill {
+    /* keep pills compact on phones so columns aren't massive */
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+
+  /* Preview table: description column wraps, others stay tight */
+  #stmt-preview-table td:nth-child(2) {
+    white-space: normal;
+    min-width: 180px;
+  }
+
+  /* Category dropdowns shrink to fit */
+  .data-table select.cat-select {
+    font-size: 13px;
+    padding: 6px 8px;
+  }
+
+  /* Card head: title + actions wrap nicely */
+  .card-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .card-head > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .card-head > div > button { width: 100%; }
+  /* When the AI button is visible, give Save the full width on its own row */
+  .card-head > div > button#stmt-save { grid-column: 1 / -1; }
+
+  /* Big-number cards in History tab */
+  .big { font-size: 20px; }
+  .summary-grid { grid-template-columns: 1fr; }
+
+  /* Sub-tabs: scroll instead of wrap */
+  .sub-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+  }
+  .sub-tabs::-webkit-scrollbar { display: none; }
+  .sub-tab { white-space: nowrap; flex-shrink: 0; }
+
+  /* Allocation bar legend wraps cleanly */
+  .legend { row-gap: 6px; }
+}
+
+/* Very small phones (iPhone SE, mini) */
+@media (max-width: 380px) {
+  .brand h1 { font-size: 15px; }
+  .topbar-actions button { padding: 8px 10px; font-size: 12px; }
+  main { padding: 10px; }
+  .card { padding: 12px; }
+}
 
 .cat-pill {
   display: inline-block;

@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Fund Manager" />
+  <meta name="theme-color" content="#0f1419" />
+  <meta name="format-detection" content="telephone=no" />
   <title>Couple Fund Manager</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -10,38 +15,22 @@
   <header class="topbar">
     <div class="brand">
       <h1>Couple Fund Manager</h1>
-      <p class="tag">Personal &amp; joint cashflow planning</p>
     </div>
     <div class="topbar-actions">
-      <label class="currency">
-        Currency
-        <select id="currency-select">
-          <option value="₹">₹ INR</option>
-          <option value="$">$ USD</option>
-          <option value="€">€ EUR</option>
-          <option value="£">£ GBP</option>
-          <option value="¥">¥ JPY</option>
-          <option value="A$">A$ AUD</option>
-        </select>
-      </label>
       <span id="storage-status" class="storage-status" data-kind=""></span>
-      <button id="refresh-btn" class="ghost" title="Reload data from the laptop">Refresh</button>
-      <button id="reset-btn" class="ghost danger" title="Erase all stored data">Reset</button>
+      <button id="refresh-btn" class="ghost" title="Reload data from the laptop" aria-label="Refresh">↻</button>
     </div>
   </header>
 
   <nav class="tabs">
     <button class="tab active" data-tab="dashboard">Dashboard</button>
-    <button class="tab" data-tab="setup">Setup</button>
-    <button class="tab" data-tab="expenses">Fixed Expenses</button>
-    <button class="tab" data-tab="savings">Savings &amp; Investments</button>
-    <button class="tab" data-tab="statements">Statements</button>
-    <button class="tab" data-tab="history">History</button>
+    <button class="tab" data-tab="plan">Plan</button>
+    <button class="tab" data-tab="spending">Spending</button>
   </nav>
 
   <main>
     <!-- DASHBOARD -->
-    <section id="tab-dashboard" class="tab-panel active">
+    <section id="tab-dashboard" class="tab-panel active" data-tab-group="dashboard">
       <div class="grid summary-grid">
         <div class="card">
           <h3 id="dash-a-name">Partner A</h3>
@@ -101,7 +90,24 @@
     </section>
 
     <!-- SETUP -->
-    <section id="tab-setup" class="tab-panel">
+    <section id="tab-setup" class="tab-panel" data-tab-group="plan">
+      <div class="card settings-card">
+        <div class="settings-row">
+          <label class="settings-field">
+            <span>Currency</span>
+            <select id="currency-select">
+              <option value="₹">₹ INR</option>
+              <option value="$">$ USD</option>
+              <option value="€">€ EUR</option>
+              <option value="£">£ GBP</option>
+              <option value="¥">¥ JPY</option>
+              <option value="A$">A$ AUD</option>
+            </select>
+          </label>
+          <button id="reset-btn" class="ghost danger" title="Erase all stored data">Erase all data</button>
+        </div>
+      </div>
+
       <div class="grid two-col">
         <div class="card">
           <h3>Partner A</h3>
@@ -128,7 +134,7 @@
     </section>
 
     <!-- EXPENSES -->
-    <section id="tab-expenses" class="tab-panel">
+    <section id="tab-expenses" class="tab-panel" data-tab-group="plan">
       <div class="card">
         <h3>Add Fixed Expense</h3>
         <form id="expense-form" class="form-row">
@@ -159,7 +165,7 @@
     </section>
 
     <!-- SAVINGS -->
-    <section id="tab-savings" class="tab-panel">
+    <section id="tab-savings" class="tab-panel" data-tab-group="plan">
       <div class="card">
         <h3>Add Savings or Investment</h3>
         <form id="savings-form" class="form-row">
@@ -193,7 +199,7 @@
     </section>
 
     <!-- STATEMENTS -->
-    <section id="tab-statements" class="tab-panel">
+    <section id="tab-statements" class="tab-panel" data-tab-group="spending">
       <div class="card">
         <h3>Upload a Monthly Statement</h3>
         <div class="form-row">
@@ -212,42 +218,42 @@
           </label>
         </div>
 
-        <div class="sub-tabs">
-          <button class="sub-tab active" data-sub="upload">Upload CSV</button>
-          <button class="sub-tab" data-sub="paste">Paste CSV</button>
-          <button class="sub-tab" data-sub="manual">Add Manually</button>
-        </div>
-
-        <div class="sub-panel active" data-sub-panel="upload">
+        <div class="upload-area">
           <input type="file" id="stmt-file" accept=".csv,text/csv,text/plain" />
-          <p class="muted">Auto-detects common column names like Date, Description/Narration/Particulars, Debit/Withdrawal, Credit/Deposit, Amount. Supports HDFC, ICICI, Axis, SBI, Kotak and similar CSV exports.</p>
+          <p class="muted">Pick a CSV exported from your bank. Auto-detects HDFC, ICICI, Axis, SBI, Kotak column layouts.</p>
         </div>
 
-        <div class="sub-panel" data-sub-panel="paste">
-          <textarea id="stmt-paste" rows="8" placeholder="Paste CSV here (with headers in the first row)"></textarea>
-          <button id="stmt-parse-paste" class="ghost">Parse Pasted Text</button>
-        </div>
+        <details class="more-options">
+          <summary>Other ways to add transactions</summary>
+          <div class="more-options-body">
+            <label>Paste CSV text
+              <textarea id="stmt-paste" rows="6" placeholder="Paste CSV here (headers in the first row)"></textarea>
+            </label>
+            <button id="stmt-parse-paste" class="ghost">Parse pasted text</button>
 
-        <div class="sub-panel" data-sub-panel="manual">
-          <form id="stmt-manual-form" class="form-row">
-            <input type="date" id="man-date" required />
-            <input type="text" id="man-desc" placeholder="Description" required />
-            <input type="number" id="man-debit" placeholder="Debit / Outflow" min="0" step="any" />
-            <input type="number" id="man-credit" placeholder="Credit / Inflow" min="0" step="any" />
-            <button type="submit">Add Row</button>
-          </form>
-          <p class="muted">Add cash transactions or any rows missing from your bank export.</p>
-        </div>
+            <h4 class="sub-heading">Add a transaction by hand</h4>
+            <form id="stmt-manual-form" class="form-row">
+              <input type="date" id="man-date" required />
+              <input type="text" id="man-desc" placeholder="Description" required />
+              <input type="number" id="man-debit" placeholder="Outflow" min="0" step="any" />
+              <input type="number" id="man-credit" placeholder="Inflow" min="0" step="any" />
+              <button type="submit">Add</button>
+            </form>
+            <p class="muted">Use this for cash transactions or rows missing from your bank export.</p>
+          </div>
+        </details>
       </div>
 
       <div class="card" id="stmt-preview-card" hidden>
         <div class="card-head">
           <h3>Preview <span class="muted" id="stmt-preview-count"></span></h3>
           <div>
+            <button id="stmt-ai" class="ghost" hidden title="Send 'Other' rows to Claude for categorization">AI categorize</button>
             <button id="stmt-discard" class="ghost">Discard</button>
             <button id="stmt-save">Save Statement</button>
           </div>
         </div>
+        <p class="muted" id="ai-status" hidden></p>
         <table class="data-table" id="stmt-preview-table">
           <thead>
             <tr>
@@ -292,7 +298,7 @@
     </section>
 
     <!-- HISTORY -->
-    <section id="tab-history" class="tab-panel">
+    <section id="tab-history" class="tab-panel" data-tab-group="spending">
       <div class="card">
         <h3>Filters</h3>
         <div class="form-row">

@@ -201,18 +201,74 @@ function monthOf(isoDate) {
 // ---------- Statements UI ----------
 let draftTxns = [];
 
-function initStatements() {
-  // Sub-tabs
-  document.querySelectorAll(".sub-tab").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const k = btn.dataset.sub;
-      document.querySelectorAll(".sub-tab").forEach((b) => b.classList.toggle("active", b === btn));
-      document.querySelectorAll(".sub-panel").forEach((p) => {
-        p.classList.toggle("active", p.dataset.subPanel === k);
-      });
-    });
-  });
+let aiAvailable = false;
 
+async function checkAIStatus() {
+  if (location.protocol !== "http:" && location.protocol !== "https:") return;
+  try {
+    const r = await fetch("/api/categorize/status", { cache: "no-store" });
+    if (!r.ok) return;
+    const body = await r.json();
+    aiAvailable = !!body.available;
+    const btn = document.getElementById("stmt-ai");
+    if (btn) {
+      btn.hidden = !aiAvailable;
+      if (aiAvailable && body.model) {
+        btn.title = `Send 'Other' rows to ${body.model} for categorization`;
+      } else if (body.reason) {
+        btn.title = body.reason;
+      }
+    }
+  } catch {
+    // server doesn't support categorization; leave button hidden
+  }
+}
+
+async function aiCategorize() {
+  const targets = draftTxns.filter((t) => t.category === "Other");
+  const status = document.getElementById("ai-status");
+  const btn = document.getElementById("stmt-ai");
+  if (!targets.length) {
+    status.textContent = "Nothing to categorize — no rows are tagged Other.";
+    status.hidden = false;
+    return;
+  }
+  btn.disabled = true;
+  status.hidden = false;
+  status.textContent = `Asking Claude to categorize ${targets.length} row${targets.length === 1 ? "" : "s"}…`;
+  try {
+    const r = await fetch("/api/categorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        transactions: targets.map((t) => ({ id: t.id, description: t.description })),
+        categories: CATEGORIES,
+      }),
+    });
+    const body = await r.json();
+    if (!r.ok) {
+      status.textContent = `AI categorization failed: ${body.error || r.statusText}`;
+      return;
+    }
+    const results = body.results || {};
+    let updated = 0;
+    for (const t of draftTxns) {
+      const cat = results[t.id];
+      if (cat && CATEGORIES.includes(cat) && cat !== t.category) {
+        t.category = cat;
+        updated++;
+      }
+    }
+    status.textContent = `Updated ${updated} of ${targets.length} rows using ${body.model || "Claude"}.`;
+    renderPreview();
+  } catch (e) {
+    status.textContent = `AI categorization failed: ${e.message || e}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function initStatements() {
   // Default the month picker to current month
   const mEl = document.getElementById("stmt-month");
   const now = new Date();
@@ -273,6 +329,10 @@ function initStatements() {
     e.target.reset();
     renderPreview();
   });
+
+  // AI categorize
+  document.getElementById("stmt-ai").addEventListener("click", aiCategorize);
+  checkAIStatus();
 
   // Discard + Save
   document.getElementById("stmt-discard").addEventListener("click", () => {
@@ -354,8 +414,10 @@ function autoSetMonthFromDraft() {
 function renderPreview() {
   const card = document.getElementById("stmt-preview-card");
   const tbody = document.querySelector("#stmt-preview-table tbody");
+  const status = document.getElementById("ai-status");
   if (!draftTxns.length) {
     card.hidden = true;
+    if (status) status.hidden = true;
     return;
   }
   card.hidden = false;

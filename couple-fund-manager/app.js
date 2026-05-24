@@ -171,8 +171,10 @@ function initTabs() {
       const target = btn.dataset.tab;
       document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
       document.querySelectorAll(".tab-panel").forEach((p) => {
-        p.classList.toggle("active", p.id === `tab-${target}`);
+        const group = p.dataset.tabGroup || p.id.replace(/^tab-/, "");
+        p.classList.toggle("active", group === target);
       });
+      try { window.scrollTo(0, 0); } catch {}
     });
   });
 }
