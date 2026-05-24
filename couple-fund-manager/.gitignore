@@ -1,0 +1,4 @@
+# Runtime data — never commit
+data.json
+data.json.token
+*.token
