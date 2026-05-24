@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Couple Fund Manager</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Couple Fund Manager</h1>
+      <p class="tag">Personal &amp; joint cashflow planning</p>
+    </div>
+    <div class="topbar-actions">
+      <label class="currency">
+        Currency
+        <select id="currency-select">
+          <option value="₹">₹ INR</option>
+          <option value="$">$ USD</option>
+          <option value="€">€ EUR</option>
+          <option value="£">£ GBP</option>
+          <option value="¥">¥ JPY</option>
+          <option value="A$">A$ AUD</option>
+        </select>
+      </label>
+      <button id="reset-btn" class="ghost danger" title="Erase all stored data">Reset</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="setup">Setup</button>
+    <button class="tab" data-tab="expenses">Fixed Expenses</button>
+    <button class="tab" data-tab="savings">Savings &amp; Investments</button>
+  </nav>
+
+  <main>
+    <!-- DASHBOARD -->
+    <section id="tab-dashboard" class="tab-panel active">
+      <div class="grid summary-grid">
+        <div class="card">
+          <h3 id="dash-a-name">Partner A</h3>
+          <div class="row"><span>Income</span><strong id="dash-a-income">0</strong></div>
+          <div class="row"><span>Personal expenses</span><strong id="dash-a-exp">0</strong></div>
+          <div class="row"><span>Personal savings</span><strong id="dash-a-sav">0</strong></div>
+          <div class="row"><span>Contribution to joint</span><strong id="dash-a-contrib">0</strong></div>
+          <div class="row total"><span>Personal surplus</span><strong id="dash-a-surplus">0</strong></div>
+        </div>
+
+        <div class="card">
+          <h3 id="dash-b-name">Partner B</h3>
+          <div class="row"><span>Income</span><strong id="dash-b-income">0</strong></div>
+          <div class="row"><span>Personal expenses</span><strong id="dash-b-exp">0</strong></div>
+          <div class="row"><span>Personal savings</span><strong id="dash-b-sav">0</strong></div>
+          <div class="row"><span>Contribution to joint</span><strong id="dash-b-contrib">0</strong></div>
+          <div class="row total"><span>Personal surplus</span><strong id="dash-b-surplus">0</strong></div>
+        </div>
+
+        <div class="card joint-card">
+          <h3>Joint Account</h3>
+          <div class="row"><span>Inflow (contributions)</span><strong id="dash-j-in">0</strong></div>
+          <div class="row"><span>Joint expenses</span><strong id="dash-j-exp">0</strong></div>
+          <div class="row"><span>Joint savings</span><strong id="dash-j-sav">0</strong></div>
+          <div class="row total"><span>Joint surplus</span><strong id="dash-j-surplus">0</strong></div>
+        </div>
+      </div>
+
+      <div class="grid two-col">
+        <div class="card">
+          <h3>Household Snapshot</h3>
+          <div class="row"><span>Total household income</span><strong id="hh-income">0</strong></div>
+          <div class="row"><span>Total fixed expenses</span><strong id="hh-exp">0</strong></div>
+          <div class="row"><span>Total savings &amp; investments</span><strong id="hh-sav">0</strong></div>
+          <div class="row total"><span>Net household surplus</span><strong id="hh-net">0</strong></div>
+          <div class="row"><span>Savings rate</span><strong id="hh-rate">0%</strong></div>
+        </div>
+
+        <div class="card">
+          <h3>Allocation of Income</h3>
+          <div class="bar-stack" id="alloc-bar"></div>
+          <div class="legend">
+            <span><i class="sw exp"></i> Expenses</span>
+            <span><i class="sw sav"></i> Savings/Investments</span>
+            <span><i class="sw surplus"></i> Surplus</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Joint Contribution Suggestion</h3>
+        <p class="muted">If you'd like to split joint outflows proportionally to income, use these:</p>
+        <div class="row"><span id="sugg-a-label">Partner A suggested contribution</span><strong id="sugg-a">0</strong></div>
+        <div class="row"><span id="sugg-b-label">Partner B suggested contribution</span><strong id="sugg-b">0</strong></div>
+        <p class="muted">Required to cover joint outflows: <strong id="sugg-required">0</strong></p>
+      </div>
+    </section>
+
+    <!-- SETUP -->
+    <section id="tab-setup" class="tab-panel">
+      <div class="grid two-col">
+        <div class="card">
+          <h3>Partner A</h3>
+          <label>Name <input type="text" id="a-name" /></label>
+          <label>Monthly income <input type="number" id="a-income" min="0" step="any" /></label>
+          <label>Monthly contribution to joint <input type="number" id="a-contrib" min="0" step="any" /></label>
+        </div>
+        <div class="card">
+          <h3>Partner B</h3>
+          <label>Name <input type="text" id="b-name" /></label>
+          <label>Monthly income <input type="number" id="b-income" min="0" step="any" /></label>
+          <label>Monthly contribution to joint <input type="number" id="b-contrib" min="0" step="any" /></label>
+        </div>
+      </div>
+      <div class="card">
+        <h3>How it works</h3>
+        <ul class="howto">
+          <li>Each partner has a <strong>personal account</strong> funded by their own income.</li>
+          <li>A shared <strong>joint account</strong> is funded by monthly contributions from each partner.</li>
+          <li>Add <strong>fixed expenses</strong> and <strong>savings/investments</strong> and assign each to whichever account pays for it.</li>
+          <li>The Dashboard shows monthly surplus per account and across the household.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- EXPENSES -->
+    <section id="tab-expenses" class="tab-panel">
+      <div class="card">
+        <h3>Add Fixed Expense</h3>
+        <form id="expense-form" class="form-row">
+          <input type="text" id="exp-name" placeholder="e.g. Rent, Netflix" required />
+          <input type="number" id="exp-amount" placeholder="Amount" min="0" step="any" required />
+          <select id="exp-account" required>
+            <option value="personalA">Personal — A</option>
+            <option value="personalB">Personal — B</option>
+            <option value="joint">Joint</option>
+          </select>
+          <input type="text" id="exp-category" placeholder="Category (optional)" />
+          <button type="submit">Add</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Fixed Expenses</h3>
+        <table class="data-table" id="expenses-table">
+          <thead>
+            <tr><th>Name</th><th>Category</th><th>Account</th><th class="num">Amount</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr><td colspan="3" class="num-label">Total</td><td class="num"><strong id="exp-total">0</strong></td><td></td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- SAVINGS -->
+    <section id="tab-savings" class="tab-panel">
+      <div class="card">
+        <h3>Add Savings or Investment</h3>
+        <form id="savings-form" class="form-row">
+          <input type="text" id="sav-name" placeholder="e.g. SIP, Emergency Fund" required />
+          <input type="number" id="sav-amount" placeholder="Monthly amount" min="0" step="any" required />
+          <select id="sav-account" required>
+            <option value="personalA">Personal — A</option>
+            <option value="personalB">Personal — B</option>
+            <option value="joint">Joint</option>
+          </select>
+          <select id="sav-type" required>
+            <option value="savings">Savings</option>
+            <option value="investment">Investment</option>
+          </select>
+          <button type="submit">Add</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Savings &amp; Investments</h3>
+        <table class="data-table" id="savings-table">
+          <thead>
+            <tr><th>Name</th><th>Type</th><th>Account</th><th class="num">Monthly</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr><td colspan="3" class="num-label">Total</td><td class="num"><strong id="sav-total">0</strong></td><td></td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>Data is stored locally in your browser. Nothing leaves this device.</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
