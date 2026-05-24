@@ -157,14 +157,22 @@ function parseAmount(s) {
 function csvToTransactions(text) {
   const rows = parseCSV(text);
   if (rows.length < 2) return { transactions: [], skipped: 0 };
-  // find header row - the row with the most matches in known patterns
-  let headerIdx = 0;
+  // Real bank exports often have 15-25 lines of account header / summary
+  // before the transaction table. Scan a generous window and only accept
+  // a row as the header if it has BOTH a date column and an amount-ish
+  // column — otherwise a row like "Customer Name, John Smith" can match
+  // 'name' and be mistaken for the header.
+  let headerIdx = -1;
   let bestScore = -1;
-  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+  for (let i = 0; i < Math.min(rows.length, 50); i++) {
     const cols = detectColumns(rows[i]);
+    const hasDate = cols.date >= 0;
+    const hasAmount = cols.debit >= 0 || cols.credit >= 0 || cols.amount >= 0;
+    if (!hasDate || !hasAmount) continue;
     const score = Object.values(cols).filter((v) => v >= 0).length;
     if (score > bestScore) { bestScore = score; headerIdx = i; }
   }
+  if (headerIdx < 0) return { transactions: [], skipped: 0 };
   const cols = detectColumns(rows[headerIdx]);
   const out = [];
   let skipped = 0;
