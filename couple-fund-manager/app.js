@@ -10,6 +10,7 @@ const defaultState = () => ({
   },
   expenses: [],
   savings: [],
+  statements: [],
 });
 
 let state = load();
@@ -26,6 +27,7 @@ function load() {
       },
       expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
       savings: Array.isArray(parsed.savings) ? parsed.savings : [],
+      statements: Array.isArray(parsed.statements) ? parsed.statements : [],
     };
   } catch {
     return defaultState();
@@ -329,6 +331,8 @@ function render() {
   renderExpenses();
   renderSavings();
   renderDashboard();
+  if (typeof renderStatements === "function") renderStatements();
+  if (typeof renderHistory === "function") renderHistory();
 }
 
 function init() {
@@ -338,7 +342,19 @@ function init() {
   initReset();
   initExpenseForm();
   initSavingsForm();
+  if (typeof initStatements === "function") initStatements();
   render();
 }
 
-init();
+// Expose for statements.js
+window.CFM = {
+  get state() { return state; },
+  save, render, fmt, accountLabel, escapeHtml, uid,
+};
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  // statements.js is loaded immediately after, so wait one tick
+  setTimeout(init, 0);
+}

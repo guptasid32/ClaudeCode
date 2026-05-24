@@ -33,6 +33,8 @@
     <button class="tab" data-tab="setup">Setup</button>
     <button class="tab" data-tab="expenses">Fixed Expenses</button>
     <button class="tab" data-tab="savings">Savings &amp; Investments</button>
+    <button class="tab" data-tab="statements">Statements</button>
+    <button class="tab" data-tab="history">History</button>
   </nav>
 
   <main>
@@ -187,6 +189,183 @@
         </table>
       </div>
     </section>
+
+    <!-- STATEMENTS -->
+    <section id="tab-statements" class="tab-panel">
+      <div class="card">
+        <h3>Upload a Monthly Statement</h3>
+        <div class="form-row">
+          <label>Account
+            <select id="stmt-account">
+              <option value="personalA">Personal — A</option>
+              <option value="personalB">Personal — B</option>
+              <option value="joint">Joint</option>
+            </select>
+          </label>
+          <label>Month
+            <input type="month" id="stmt-month" />
+          </label>
+          <label>Statement label (optional)
+            <input type="text" id="stmt-label" placeholder="e.g. HDFC Savings" />
+          </label>
+        </div>
+
+        <div class="sub-tabs">
+          <button class="sub-tab active" data-sub="upload">Upload CSV</button>
+          <button class="sub-tab" data-sub="paste">Paste CSV</button>
+          <button class="sub-tab" data-sub="manual">Add Manually</button>
+        </div>
+
+        <div class="sub-panel active" data-sub-panel="upload">
+          <input type="file" id="stmt-file" accept=".csv,text/csv,text/plain" />
+          <p class="muted">Auto-detects common column names like Date, Description/Narration/Particulars, Debit/Withdrawal, Credit/Deposit, Amount. Supports HDFC, ICICI, Axis, SBI, Kotak and similar CSV exports.</p>
+        </div>
+
+        <div class="sub-panel" data-sub-panel="paste">
+          <textarea id="stmt-paste" rows="8" placeholder="Paste CSV here (with headers in the first row)"></textarea>
+          <button id="stmt-parse-paste" class="ghost">Parse Pasted Text</button>
+        </div>
+
+        <div class="sub-panel" data-sub-panel="manual">
+          <form id="stmt-manual-form" class="form-row">
+            <input type="date" id="man-date" required />
+            <input type="text" id="man-desc" placeholder="Description" required />
+            <input type="number" id="man-debit" placeholder="Debit / Outflow" min="0" step="any" />
+            <input type="number" id="man-credit" placeholder="Credit / Inflow" min="0" step="any" />
+            <button type="submit">Add Row</button>
+          </form>
+          <p class="muted">Add cash transactions or any rows missing from your bank export.</p>
+        </div>
+      </div>
+
+      <div class="card" id="stmt-preview-card" hidden>
+        <div class="card-head">
+          <h3>Preview <span class="muted" id="stmt-preview-count"></span></h3>
+          <div>
+            <button id="stmt-discard" class="ghost">Discard</button>
+            <button id="stmt-save">Save Statement</button>
+          </div>
+        </div>
+        <table class="data-table" id="stmt-preview-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Category</th>
+              <th class="num">Debit</th>
+              <th class="num">Credit</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3" class="num-label">Totals</td>
+              <td class="num"><strong id="prev-debit-total">0</strong></td>
+              <td class="num"><strong id="prev-credit-total">0</strong></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Saved Statements</h3>
+        <table class="data-table" id="saved-statements-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Account</th>
+              <th>Label</th>
+              <th class="num">Txns</th>
+              <th class="num">Outflow</th>
+              <th class="num">Inflow</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="muted" id="saved-empty" hidden>No statements saved yet.</p>
+      </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="tab-history" class="tab-panel">
+      <div class="card">
+        <h3>Filters</h3>
+        <div class="form-row">
+          <label>Month
+            <select id="hist-month"></select>
+          </label>
+          <label>Account view
+            <select id="hist-account">
+              <option value="combined">Combined (all)</option>
+              <option value="personalA">Personal — A</option>
+              <option value="personalB">Personal — B</option>
+              <option value="joint">Joint</option>
+              <option value="personalBoth">Both personal</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="grid summary-grid">
+        <div class="card">
+          <h3>Inflow</h3>
+          <div class="big positive" id="hist-inflow">0</div>
+        </div>
+        <div class="card">
+          <h3>Outflow</h3>
+          <div class="big negative" id="hist-outflow">0</div>
+        </div>
+        <div class="card">
+          <h3>Net</h3>
+          <div class="big" id="hist-net">0</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Spend by Category</h3>
+        <table class="data-table" id="hist-category-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="num">Txns</th>
+              <th class="num">Amount</th>
+              <th class="num">Share</th>
+              <th class="bar-col">Distribution</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="muted" id="hist-empty" hidden>No transactions yet for this filter. Upload a statement in the Statements tab.</p>
+      </div>
+
+      <div class="card">
+        <h3>Monthly Trend</h3>
+        <table class="data-table" id="hist-trend-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th class="num">Inflow</th>
+              <th class="num">Outflow</th>
+              <th class="num">Net</th>
+              <th>Top categories</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr>
+              <td class="num-label"><strong>Till now</strong></td>
+              <td class="num"><strong id="trend-in-total">0</strong></td>
+              <td class="num"><strong id="trend-out-total">0</strong></td>
+              <td class="num"><strong id="trend-net-total">0</strong></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
   </main>
 
   <footer class="foot">
@@ -194,5 +373,6 @@
   </footer>
 
   <script src="app.js"></script>
+  <script src="statements.js"></script>
 </body>
 </html>

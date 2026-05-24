@@ -320,3 +320,115 @@ button.icon:hover { color: var(--bad); }
   color: var(--muted);
   font-size: 12px;
 }
+
+/* Statements & history */
+.sub-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 6px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sub-tab {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+
+.sub-tab:hover { color: var(--text); }
+.sub-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+.sub-panel { display: none; }
+.sub-panel.active { display: block; }
+
+textarea {
+  width: 100%;
+  padding: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  resize: vertical;
+  outline: none;
+}
+textarea:focus { border-color: var(--accent); }
+
+input[type="file"] {
+  width: 100%;
+  padding: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+input[type="date"], input[type="month"] {
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 4px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+  color-scheme: dark;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.card-head h3 { margin: 0; }
+.card-head > div { display: flex; gap: 8px; }
+
+.data-table select.cat-select {
+  padding: 4px 6px;
+  font-size: 12px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: 0;
+}
+
+.bar-col { width: 30%; }
+
+.bar-inline {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.bar-inline > div {
+  height: 100%;
+  background: var(--accent);
+}
+
+.big {
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.big.positive { color: var(--good); }
+.big.negative { color: var(--bad); }
+
+.cat-pill {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--muted);
+  margin-right: 4px;
+}
